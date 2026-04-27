@@ -1,4 +1,4 @@
-# Vue 3 Complete Cheat Sheet
+# Vue 3 Complete Cheat Sheet — Options API
 
 ---
 
@@ -34,8 +34,23 @@ app.mount('#app')   // always last
 ## Single File Component (SFC)
 
 ```vue
-<script setup lang="ts">
-// logic
+<script>
+export default {
+  name: 'MyComponent',
+
+  data() {
+    return {
+      // reactive state
+    }
+  },
+
+  computed: {},
+  watch: {},
+  methods: {},
+
+  // lifecycle hooks
+  mounted() {}
+}
 </script>
 
 <template>
@@ -51,30 +66,46 @@ app.mount('#app')   // always last
 
 ## Reactivity
 
-```ts
-import { ref, reactive, computed, watch, watchEffect } from 'vue'
+```js
+export default {
+  data() {
+    return {
+      count: 0,
+      board: { title: '', columns: [] }
+    }
+  },
 
-// primitives
-const count = ref(0)
-count.value++                        // .value in JS
-// {{ count }} in template — no .value needed
+  computed: {
+    // cached — recalculates when deps change
+    total() {
+      return this.board.columns.length
+    },
+    // writable computed
+    fullName: {
+      get() { return `${this.first} ${this.last}` },
+      set(val) { [this.first, this.last] = val.split(' ') }
+    }
+  },
 
-// objects
-const board = reactive({ title: '', columns: [] })
-board.title = 'My Board'             // no .value
+  watch: {
+    // fires when count changes
+    count(newVal, oldVal) {
+      console.log(newVal)
+    },
+    // deep + immediate
+    board: {
+      handler(newVal) { console.log(newVal) },
+      deep: true,
+      immediate: true
+    }
+  },
 
-// computed — cached, recalculates when deps change
-const total = computed(() => columns.value.length)
-
-// watch — explicit, fires on change
-watch(count, (newVal, oldVal) => { console.log(newVal) })
-watch([count, title], ([newCount, newTitle]) => {})
-watch(count, cb, { deep: true, immediate: true })
-
-// watchEffect — auto-tracks, runs immediately
-watchEffect(() => {
-  document.title = `${count.value} items`
-})
+  methods: {
+    increment() {
+      this.count++
+    }
+  }
+}
 ```
 
 ---
@@ -102,20 +133,21 @@ v-once                                <!-- render once, skip updates -->
 
 ```vue
 <!-- Child -->
-<script setup lang="ts">
-const props = defineProps<{
-  title: string
-  count?: number
-}>()
+<script>
+export default {
+  props: {
+    title: { type: String, required: true },
+    count: { type: Number, default: 0 }
+  },
 
-withDefaults(defineProps<{ count?: number }>(), { count: 0 })
+  emits: ['addCard', 'delete'],
 
-const emit = defineEmits<{
-  addCard: [columnId: number, title: string]
-  delete: [id: number]
-}>()
-
-emit('addCard', 1, 'New Task')
+  methods: {
+    handleAdd() {
+      this.$emit('addCard', 1, 'New Task')
+    }
+  }
+}
 </script>
 ```
 
@@ -134,12 +166,16 @@ emit('addCard', 1, 'New Task')
 <!-- expands to: :modelValue="title" @update:modelValue="title = $event" -->
 
 <!-- Child: CardInput.vue -->
-<script setup>
-defineProps<{ modelValue: string }>()
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+<script>
+export default {
+  props: {
+    modelValue: { type: String }
+  },
+  emits: ['update:modelValue']
+}
 </script>
 <template>
-  <input :value="modelValue" @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)" />
+  <input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />
 </template>
 ```
 
@@ -147,43 +183,56 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 ## Lifecycle Hooks
 
-```ts
-import { onBeforeMount, onMounted, onUpdated, onUnmounted, onActivated, onDeactivated } from 'vue'
-
-onBeforeMount(() => {})   // before DOM created
-onMounted(() => {})       // DOM ready — fetch data, init libs
-onUpdated(() => {})       // after re-render
-onUnmounted(() => {})     // cleanup — clear intervals, remove listeners
-onActivated(() => {})     // KeepAlive — came into view
-onDeactivated(() => {})   // KeepAlive — hidden
+```js
+export default {
+  beforeCreate() {},    // instance initializing
+  created() {},         // data/methods ready — fetch here
+  beforeMount() {},     // before DOM created
+  mounted() {},         // DOM ready — access refs, init libs
+  beforeUpdate() {},    // before re-render
+  updated() {},         // after re-render
+  beforeUnmount() {},   // cleanup while APIs still live
+  unmounted() {},       // cleanup — remove listeners, cancel subs
+  activated() {},       // KeepAlive — came into view
+  deactivated() {}      // KeepAlive — hidden
+}
 ```
+
+See [lifecycle-hooks/LIFECYCLE_HOOKS.md](lifecycle-hooks/LIFECYCLE_HOOKS.md) for full examples.
 
 ---
 
 ## Template Refs
 
 ```vue
-<script setup>
-const inputEl = ref<HTMLInputElement>()
-onMounted(() => inputEl.value?.focus())
+<script>
+export default {
+  mounted() {
+    this.$refs.input.focus()   // access after mounted
+  }
+}
 </script>
 
 <template>
-  <input ref="inputEl" />
+  <input ref="input" />
 </template>
 ```
 
----
+Child component ref — call exposed methods directly:
 
-## defineExpose — expose child internals to parent
+```vue
+<!-- Parent -->
+<script>
+export default {
+  mounted() {
+    this.$refs.card.focus()   // call child method
+  }
+}
+</script>
 
-```ts
-// Child
-defineExpose({ focus, reset })
-
-// Parent
-const cardRef = ref()
-cardRef.value.focus()   // call after onMounted
+<template>
+  <CardComponent ref="card" />
+</template>
 ```
 
 ---
@@ -214,46 +263,75 @@ cardRef.value.focus()   // call after onMounted
 
 ---
 
-## Composables (Custom Hooks)
+## Mixins (Reuse Logic)
 
-```ts
-// src/composables/useCardEditor.ts
-import { ref } from 'vue'
+Mixins are Options API's code-reuse mechanism. Prefer composables via `setup()` for new code.
 
-export function useCardEditor() {
-  const isEditing = ref(false)
-  const editText = ref('')
-
-  function startEdit(title: string) {
-    editText.value = title
-    isEditing.value = true
+```js
+// src/mixins/editableMixin.js
+export const editableMixin = {
+  data() {
+    return { isEditing: false, editText: '' }
+  },
+  methods: {
+    startEdit(title) {
+      this.editText = title
+      this.isEditing = true
+    },
+    cancelEdit() {
+      this.isEditing = false
+    }
   }
-
-  return { isEditing, editText, startEdit }
 }
 
-// in any component
-const { isEditing, editText, startEdit } = useCardEditor()
+// in component
+import { editableMixin } from '@/mixins/editableMixin'
+
+export default {
+  mixins: [editableMixin],
+  // this.isEditing, this.startEdit() available
+}
 ```
 
 ---
 
 ## provide / inject (Dependency Injection)
 
-```ts
-// Provider — any ancestor component or main.ts
-import { provide, ref } from 'vue'
-const theme = ref('dark')
-provide('theme', theme)
+```js
+// Provider component
+export default {
+  provide() {
+    return {
+      theme: this.theme   // not reactive by default
+    }
+  },
+  data() {
+    return { theme: 'dark' }
+  }
+}
 
+// For reactive provide, use computed
+import { computed } from 'vue'
+export default {
+  provide() {
+    return {
+      theme: computed(() => this.theme)
+    }
+  }
+}
+```
+
+```js
 // Consumer — any descendant, any depth
-import { inject } from 'vue'
-const theme = inject('theme')   // no prop drilling
+export default {
+  inject: ['theme'],
+  // this.theme available
 
-// Use Symbol keys to avoid collision in large apps
-export const THEME_KEY = Symbol('theme')
-provide(THEME_KEY, theme)
-const theme = inject(THEME_KEY)
+  // with default value
+  inject: {
+    theme: { default: 'light' }
+  }
+}
 ```
 
 ---
@@ -300,9 +378,15 @@ app.directive('click-outside', {
 
 ## Dynamic Component
 
-```ts
-const views = { board: BoardView, settings: SettingsView }
-const active = ref('board')
+```js
+export default {
+  data() {
+    return {
+      active: 'board',
+      views: { board: BoardView, settings: SettingsView }
+    }
+  }
+}
 ```
 
 ```html
@@ -327,55 +411,35 @@ const HeavyChart = defineAsyncComponent({
 
 ---
 
-## Suspense
-
-```vue
-<Suspense>
-  <template #default><AsyncBoard /></template>
-  <template #fallback><Spinner /></template>
-</Suspense>
-
-<!-- AsyncBoard.vue — top level await -->
-<script setup>
-const data = await fetch('/api/boards').then(r => r.json())
-</script>
-```
-
----
-
-## Reactivity Utilities
-
-```ts
-import { markRaw, toRaw, shallowRef } from 'vue'
-
-markRaw(obj)          // never proxy this — maps, charts, class instances
-toRaw(reactiveObj)    // unwrap proxy → plain JS object for serialization
-shallowRef([])        // only track .value replacement, not deep changes
-```
-
----
-
 ## nextTick — wait for DOM update
 
-```ts
-import { nextTick } from 'vue'
-
-cards.value.push(newCard)
-await nextTick()           // DOM updated
-inputEl.value?.focus()     // safe to access new element now
+```js
+export default {
+  methods: {
+    async addAndFocus() {
+      this.cards.push(newCard)
+      await this.$nextTick()      // DOM updated
+      this.$refs.newInput.focus() // safe to access new element
+    }
+  }
+}
 ```
 
 ---
 
-## defineOptions
+## Component Options
 
-```ts
-defineOptions({
-  name: 'KanbanCard',
-  inheritAttrs: false,   // don't auto-apply parent attrs to root element
-})
-// forward attrs manually to specific element
-// <input v-bind="$attrs" />
+```js
+export default {
+  name: 'KanbanCard',             // for DevTools + recursive components
+  inheritAttrs: false,            // don't auto-apply parent attrs to root
+  components: { ChildComponent }, // local registration
+}
+```
+
+```html
+<!-- forward attrs manually to specific element -->
+<input v-bind="$attrs" />
 ```
 
 ---
@@ -430,29 +494,36 @@ router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isLoggedIn) return { path: '/login' }
 })
-
-router.afterEach((to) => {
-  document.title = to.meta.title ?? 'App'
-})
 ```
 
-```ts
-// in component
-import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+```js
+// in component — Options API
+export default {
+  computed: {
+    boardId() { return this.$route.params.id }
+  },
 
-const route = useRoute()
-route.params.id
-route.meta.requiresAuth
+  methods: {
+    goToBoard(id) {
+      this.$router.push({ name: 'board', params: { id } })
+    },
+    goBack() {
+      this.$router.back()
+    }
+  },
 
-const router = useRouter()
-router.push('/board/1')
-router.push({ name: 'board', params: { id: 1 } })
-router.replace('/login')
-router.back()
-
-onBeforeRouteLeave(() => {
-  if (unsaved.value) return false   // block navigation
-})
+  // in-component route guards
+  beforeRouteEnter(to, from, next) {
+    next(vm => { /* vm = component instance */ })
+  },
+  beforeRouteUpdate(to, from) {
+    // fires when same component but route params change
+    this.fetchData(to.params.id)
+  },
+  beforeRouteLeave(to, from) {
+    if (this.unsaved) return false   // block navigation
+  }
+}
 ```
 
 ---
@@ -460,56 +531,41 @@ onBeforeRouteLeave(() => {
 ## Pinia
 
 ```ts
-// stores/board.ts
+// stores/board.ts — setup store (works with Options API too)
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
 export const useBoardStore = defineStore('board', () => {
-  // state
   const columns = ref([])
 
-  // getter — cached computed
   const totalCards = computed(() =>
     columns.value.reduce((n, col) => n + col.cards.length, 0)
   )
 
-  // action
-  function addCard(columnId: number, title: string) {
+  function addCard(columnId, title) {
     const col = columns.value.find(c => c.id === columnId)
     col?.cards.push({ id: Date.now(), title })
   }
 
-  function $reset() { columns.value = [] }
-
-  return { columns, totalCards, addCard, $reset }
-}, {
-  persist: { pick: ['columns'] }   // requires pinia-plugin-persistedstate
+  return { columns, totalCards, addCard }
 })
 ```
 
-```ts
-// in component
-import { storeToRefs } from 'pinia'
+```js
+// in Options API component
+import { mapStores, mapState, mapActions } from 'pinia'
+import { useBoardStore } from '@/stores/board'
 
-const store = useBoardStore()
-const { columns, totalCards } = storeToRefs(store)   // reactive destructure
-const { addCard } = store                             // actions — no storeToRefs needed
+export default {
+  computed: {
+    ...mapStores(useBoardStore),                         // this.boardStore
+    ...mapState(useBoardStore, ['columns', 'totalCards']) // this.columns, this.totalCards
+  },
 
-store.$patch({ columns: [] })
-store.$subscribe((mutation, state) => {})
-store.$onAction(({ name, after }) => {})
-store.$dispose()
-```
-
-```ts
-// Pinia plugin — main.ts
-pinia.use(({ store }) => {
-  store.$api = { get: url => fetch(url).then(r => r.json()) }
-})
-
-// pinia.state.value — snapshot all stores
-const snapshot = JSON.stringify(pinia.state.value)
-pinia.state.value = JSON.parse(snapshot)   // restore
+  methods: {
+    ...mapActions(useBoardStore, ['addCard'])             // this.addCard()
+  }
+}
 ```
 
 ---
