@@ -1,13 +1,9 @@
 # Others
 
-Learning notes for topics outside Vue.
+Learning notes for topics.
 
 ---
 
 ## Topics (add as you go)
 
-- [ ] TypeScript
-- [ ] Git & GitHub workflows
-- [ ] REST API design
-- [ ] Docker basics
-- [ ] Testing (Vitest / Jest)
+- [ ] Vue

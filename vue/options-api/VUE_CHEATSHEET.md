@@ -1,4 +1,6 @@
-# Vue 3 Complete Cheat Sheet — Options API
+# Vue 3 Cheat Sheet — Options API
+
+Overview of all features. Each section links to a dedicated file with full examples.
 
 ---
 
@@ -8,24 +10,16 @@
 index.html → <div id="app"> → main.ts → createApp(App).mount('#app')
 ```
 
-## main.ts Full Setup
-
 ```ts
+// main.ts
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import router from './router'
 import App from './App.vue'
 
 const app = createApp(App)
-
 app.use(createPinia())
 app.use(router)
-app.component('BaseButton', BaseButton)        // global component
-app.provide('apiUrl', 'https://api.com')       // DI
-app.directive('focus', { mounted: el => el.focus() })
-app.config.errorHandler = (err) => logError(err)
-app.config.globalProperties.$filters = { currency: v => `$${v.toFixed(2)}` }
-
 app.mount('#app')   // always last
 ```
 
@@ -37,536 +31,183 @@ app.mount('#app')   // always last
 <script>
 export default {
   name: 'MyComponent',
-
-  data() {
-    return {
-      // reactive state
-    }
-  },
-
+  components: {},      // local component registration
+  props: {},           // incoming data from parent
+  emits: [],           // events this component fires
+  data() { return {} },
   computed: {},
   watch: {},
   methods: {},
-
-  // lifecycle hooks
-  mounted() {}
+  mounted() {}         // lifecycle hook
 }
 </script>
 
-<template>
-  <!-- HTML + Vue syntax -->
-</template>
+<template><!-- HTML + Vue syntax --></template>
 
-<style scoped>
-/* CSS scoped to this component */
-</style>
+<style scoped>/* CSS scoped to this component */</style>
 ```
 
 ---
 
 ## Reactivity
 
+State lives in `data()`. `computed` for derived values. `watch` for side effects. `methods` for handlers.
+
 ```js
 export default {
-  data() {
-    return {
-      count: 0,
-      board: { title: '', columns: [] }
-    }
-  },
-
+  data() { return { count: 0 } },
   computed: {
-    // cached — recalculates when deps change
-    total() {
-      return this.board.columns.length
-    },
-    // writable computed
-    fullName: {
-      get() { return `${this.first} ${this.last}` },
-      set(val) { [this.first, this.last] = val.split(' ') }
-    }
+    doubled() { return this.count * 2 }
   },
-
   watch: {
-    // fires when count changes
-    count(newVal, oldVal) {
-      console.log(newVal)
-    },
-    // deep + immediate
-    board: {
-      handler(newVal) { console.log(newVal) },
-      deep: true,
-      immediate: true
-    }
+    count(newVal) { console.log(newVal) }
   },
-
   methods: {
-    increment() {
-      this.count++
-    }
+    increment() { this.count++ }
   }
 }
 ```
+
+**Full reference:** [reactivity/REACTIVITY.md](reactivity/REACTIVITY.md)
 
 ---
 
 ## Template Syntax
 
+Interpolation, `v-if`, `v-for`, `v-model`, event/key/class/style binding.
+
 ```html
-{{ variable }}                        <!-- display value -->
-:attr="value"                         <!-- bind JS to attribute -->
-@click="handler"                      <!-- event listener -->
-@click.prevent="handler"              <!-- event modifier -->
-@keyup.enter="submit"                 <!-- key modifier -->
-v-if="condition"                      <!-- conditional render -->
-v-else-if="other"
-v-else
-v-show="condition"                    <!-- toggle display:none -->
-v-for="item in items" :key="item.id"  <!-- loop -->
-v-model="value"                       <!-- two-way binding -->
-v-once                                <!-- render once, skip updates -->
+{{ message }}
+:attr="value"           v-if="cond"        v-for="item in list" :key="item.id"
+@click="handler"        v-model="value"    @click.prevent  @keyup.enter
+:class="{ active: isActive }"              :style="{ color: textColor }"
 ```
+
+**Full reference:** [template-syntax/TEMPLATE_SYNTAX.md](template-syntax/TEMPLATE_SYNTAX.md)
 
 ---
 
-## Props + Emits
+## Props & Emits
 
-```vue
-<!-- Child -->
-<script>
+Parent passes data in via `props`. Child sends events up via `$emit`.
+
+```js
 export default {
-  props: {
-    title: { type: String, required: true },
-    count: { type: Number, default: 0 }
-  },
-
-  emits: ['addCard', 'delete'],
-
+  props: { title: { type: String, required: true }, count: { type: Number, default: 0 } },
+  emits: ['submit'],
   methods: {
-    handleAdd() {
-      this.$emit('addCard', 1, 'New Task')
-    }
+    handleSubmit() { this.$emit('submit', this.formData) }
   }
 }
-</script>
 ```
 
-```vue
-<!-- Parent -->
-<Child :title="name" :count="5" @add-card="handler" />
-```
-
----
-
-## v-model on Custom Components
-
-```vue
-<!-- Parent -->
-<CardInput v-model="title" />
-<!-- expands to: :modelValue="title" @update:modelValue="title = $event" -->
-
-<!-- Child: CardInput.vue -->
-<script>
-export default {
-  props: {
-    modelValue: { type: String }
-  },
-  emits: ['update:modelValue']
-}
-</script>
-<template>
-  <input :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />
-</template>
-```
+**Full reference:** [props-emits/PROPS_EMITS.md](props-emits/PROPS_EMITS.md)
 
 ---
 
 ## Lifecycle Hooks
 
+Hook into component creation, DOM mounting, updates, and destruction.
+
 ```js
 export default {
-  beforeCreate() {},    // instance initializing
-  created() {},         // data/methods ready — fetch here
-  beforeMount() {},     // before DOM created
-  mounted() {},         // DOM ready — access refs, init libs
-  beforeUpdate() {},    // before re-render
-  updated() {},         // after re-render
-  beforeUnmount() {},   // cleanup while APIs still live
-  unmounted() {},       // cleanup — remove listeners, cancel subs
-  activated() {},       // KeepAlive — came into view
-  deactivated() {}      // KeepAlive — hidden
+  beforeCreate() {},   created() {},
+  beforeMount() {},    mounted() {},       // DOM ready here
+  beforeUpdate() {},   updated() {},
+  beforeUnmount() {},  unmounted() {},     // cleanup here
+  activated() {},      deactivated() {},   // KeepAlive
+  errorCaptured() {},  serverPrefetch() {} // SSR
 }
 ```
 
-See [lifecycle-hooks/LIFECYCLE_HOOKS.md](lifecycle-hooks/LIFECYCLE_HOOKS.md) for full examples.
-
----
-
-## Template Refs
-
-```vue
-<script>
-export default {
-  mounted() {
-    this.$refs.input.focus()   // access after mounted
-  }
-}
-</script>
-
-<template>
-  <input ref="input" />
-</template>
-```
-
-Child component ref — call exposed methods directly:
-
-```vue
-<!-- Parent -->
-<script>
-export default {
-  mounted() {
-    this.$refs.card.focus()   // call child method
-  }
-}
-</script>
-
-<template>
-  <CardComponent ref="card" />
-</template>
-```
+**Full reference:** [lifecycle-hooks/LIFECYCLE_HOOKS.md](lifecycle-hooks/LIFECYCLE_HOOKS.md)
 
 ---
 
 ## Slots
 
-```vue
-<!-- Basic -->
-<BaseCard><p>Content</p></BaseCard>
-<template><div><slot /></div></template>
+Pass template content from parent into child component.
 
-<!-- Named -->
-<Layout>
-  <template #header><h1>Title</h1></template>
-  <template #default>Main</template>
-  <template #footer>Footer</template>
-</Layout>
-<template>
-  <slot name="header" />
-  <slot />
-  <slot name="footer" />
-</template>
-
-<!-- Scoped — child passes data to parent's slot -->
-<slot :card="card" :index="i" />
-<Child><template #default="{ card, index }">{{ card.title }}</template></Child>
+```html
+<!-- default -->         <BaseCard><p>Content</p></BaseCard>
+<!-- named -->           <template #header><h1>Title</h1></template>
+<!-- scoped -->          <template #item="{ row }">{{ row.name }}</template>
 ```
+
+**Full reference:** [slots/SLOTS.md](slots/SLOTS.md)
 
 ---
 
-## Mixins (Reuse Logic)
+## provide / inject
 
-Mixins are Options API's code-reuse mechanism. Prefer composables via `setup()` for new code.
+Pass data to deeply nested descendants without prop drilling.
 
 ```js
-// src/mixins/editableMixin.js
-export const editableMixin = {
-  data() {
-    return { isEditing: false, editText: '' }
-  },
-  methods: {
-    startEdit(title) {
-      this.editText = title
-      this.isEditing = true
-    },
-    cancelEdit() {
-      this.isEditing = false
-    }
-  }
-}
+// ancestor
+export default { provide() { return { theme: 'dark' } } }
 
-// in component
-import { editableMixin } from '@/mixins/editableMixin'
-
-export default {
-  mixins: [editableMixin],
-  // this.isEditing, this.startEdit() available
-}
+// descendant (any depth)
+export default { inject: ['theme'] }
 ```
+
+**Full reference:** [provide-inject/PROVIDE_INJECT.md](provide-inject/PROVIDE_INJECT.md)
 
 ---
 
-## provide / inject (Dependency Injection)
+## Custom Directives
+
+Extend template syntax with custom DOM behavior.
 
 ```js
-// Provider component
-export default {
-  provide() {
-    return {
-      theme: this.theme   // not reactive by default
-    }
-  },
-  data() {
-    return { theme: 'dark' }
-  }
-}
-
-// For reactive provide, use computed
-import { computed } from 'vue'
-export default {
-  provide() {
-    return {
-      theme: computed(() => this.theme)
-    }
-  }
-}
-```
-
-```js
-// Consumer — any descendant, any depth
-export default {
-  inject: ['theme'],
-  // this.theme available
-
-  // with default value
-  inject: {
-    theme: { default: 'light' }
-  }
-}
-```
-
----
-
-## Directives
-
-```ts
-// Global
-app.directive('focus', { mounted: (el) => el.focus() })
-app.directive('click-outside', {
-  mounted(el, binding) {
-    el._handler = (e) => { if (!el.contains(e.target)) binding.value() }
-    document.addEventListener('click', el._handler)
-  },
-  unmounted(el) { document.removeEventListener('click', el._handler) }
-})
-
-// Usage
+app.directive('focus', { mounted(el) { el.focus() } })
 // <input v-focus />
-// <div v-click-outside="closeMenu">...</div>
 ```
+
+**Full reference:** [directives/DIRECTIVES.md](directives/DIRECTIVES.md)
 
 ---
 
-## Teleport — render outside component tree
+## Built-in Components
 
-```vue
-<Teleport to="body">
-  <Modal v-if="showModal" />   <!-- renders directly under <body> -->
-</Teleport>
-```
-
----
-
-## KeepAlive — cache component state
-
-```vue
-<KeepAlive :max="5">
-  <RouterView />
-</KeepAlive>
-```
-
----
-
-## Dynamic Component
-
-```js
-export default {
-  data() {
-    return {
-      active: 'board',
-      views: { board: BoardView, settings: SettingsView }
-    }
-  }
-}
-```
+`<Teleport>`, `<KeepAlive>`, `<Transition>`, `<TransitionGroup>`, dynamic & async components.
 
 ```html
-<component :is="views[active]" />
+<Teleport to="body"><Modal v-if="show" /></Teleport>
+<KeepAlive :max="5"><component :is="currentTab" /></KeepAlive>
+<Transition name="fade"><div v-if="show" /></Transition>
 ```
 
----
-
-## Async Components
-
-```ts
-import { defineAsyncComponent } from 'vue'
-
-const HeavyChart = defineAsyncComponent({
-  loader: () => import('./HeavyChart.vue'),
-  loadingComponent: Spinner,
-  errorComponent: ErrorMsg,
-  delay: 200,
-  timeout: 5000,
-})
-```
-
----
-
-## nextTick — wait for DOM update
-
-```js
-export default {
-  methods: {
-    async addAndFocus() {
-      this.cards.push(newCard)
-      await this.$nextTick()      // DOM updated
-      this.$refs.newInput.focus() // safe to access new element
-    }
-  }
-}
-```
-
----
-
-## Component Options
-
-```js
-export default {
-  name: 'KanbanCard',             // for DevTools + recursive components
-  inheritAttrs: false,            // don't auto-apply parent attrs to root
-  components: { ChildComponent }, // local registration
-}
-```
-
-```html
-<!-- forward attrs manually to specific element -->
-<input v-bind="$attrs" />
-```
-
----
-
-## Transitions
-
-```vue
-<Transition name="fade">
-  <div v-if="show">...</div>
-</Transition>
-
-<TransitionGroup name="card" tag="div">
-  <Card v-for="c in cards" :key="c.id" />
-</TransitionGroup>
-```
-
-```css
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
-.card-move { transition: transform 0.3s; }
-```
+**Full reference:** [components/COMPONENTS.md](components/COMPONENTS.md)
 
 ---
 
 ## Vue Router
 
-```ts
-// router/index.ts
-import { createRouter, createWebHistory } from 'vue-router'
-
-const router = createRouter({
-  history: createWebHistory(),
-  routes: [
-    {
-      path: '/',
-      component: AppLayout,
-      children: [
-        { path: '', component: HomeView },
-        { path: 'board/:id', name: 'board', component: () => import('../views/BoardView.vue') },
-      ]
-    },
-    { path: '/login', component: LoginView, meta: { requiresAuth: false } },
-    { path: '/:pathMatch(.*)*', component: NotFoundView },
-  ],
-  scrollBehavior(to, from, saved) {
-    return saved ?? { top: 0 }
-  }
-})
-
-// global guard
-router.beforeEach((to) => {
-  const auth = useAuthStore()
-  if (to.meta.requiresAuth && !auth.isLoggedIn) return { path: '/login' }
-})
-```
+Client-side routing with navigation guards, dynamic params, and lazy loading.
 
 ```js
-// in component — Options API
-export default {
-  computed: {
-    boardId() { return this.$route.params.id }
-  },
-
-  methods: {
-    goToBoard(id) {
-      this.$router.push({ name: 'board', params: { id } })
-    },
-    goBack() {
-      this.$router.back()
-    }
-  },
-
-  // in-component route guards
-  beforeRouteEnter(to, from, next) {
-    next(vm => { /* vm = component instance */ })
-  },
-  beforeRouteUpdate(to, from) {
-    // fires when same component but route params change
-    this.fetchData(to.params.id)
-  },
-  beforeRouteLeave(to, from) {
-    if (this.unsaved) return false   // block navigation
-  }
-}
+// in component
+this.$route.params.id          // current route params
+this.$router.push({ name: 'board', params: { id } })   // navigate
 ```
+
+**Full reference:** [vue-router/VUE_ROUTER.md](vue-router/VUE_ROUTER.md)
 
 ---
 
-## Pinia
+## Pinia (State Management)
 
-```ts
-// stores/board.ts — setup store (works with Options API too)
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-
-export const useBoardStore = defineStore('board', () => {
-  const columns = ref([])
-
-  const totalCards = computed(() =>
-    columns.value.reduce((n, col) => n + col.cards.length, 0)
-  )
-
-  function addCard(columnId, title) {
-    const col = columns.value.find(c => c.id === columnId)
-    col?.cards.push({ id: Date.now(), title })
-  }
-
-  return { columns, totalCards, addCard }
-})
-```
+Global state store. Map to Options API via `mapStores`, `mapState`, `mapActions`.
 
 ```js
-// in Options API component
-import { mapStores, mapState, mapActions } from 'pinia'
-import { useBoardStore } from '@/stores/board'
-
+import { mapState, mapActions } from 'pinia'
 export default {
-  computed: {
-    ...mapStores(useBoardStore),                         // this.boardStore
-    ...mapState(useBoardStore, ['columns', 'totalCards']) // this.columns, this.totalCards
-  },
-
-  methods: {
-    ...mapActions(useBoardStore, ['addCard'])             // this.addCard()
-  }
+  computed: { ...mapState(useCounterStore, ['count']) },
+  methods:  { ...mapActions(useCounterStore, ['increment']) }
 }
 ```
+
+**Full reference:** [pinia/PINIA.md](pinia/PINIA.md)
 
 ---
 
@@ -579,9 +220,5 @@ app.directive('name', hooks)
 app.provide(key, value)
 app.config.globalProperties.$x = value
 app.config.errorHandler = (err, instance, info) => {}
-app.config.warnHandler = (msg) => {}
-app.config.compilerOptions.isCustomElement = tag => tag.startsWith('my-')
-app.config.performance = true
 app.unmount()
-app.version   // "3.5.x"
 ```

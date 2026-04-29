@@ -1,401 +1,330 @@
-# Vue 3 Lifecycle Hooks — Options API
+# Lifecycle Hooks — Options API
 
 ---
 
-## Hook Execution Order
+## Execution Order
 
 ```
-beforeCreate()
-created()
-  │
-  ├── beforeMount()
-  ├── mounted()          ← DOM ready
-  │
-  ├── [reactive data changes]
-  │     ├── beforeUpdate()
-  │     └── updated()
-  │
-  ├── [component removed]
-  │     ├── beforeUnmount()
-  │     └── unmounted()   ← cleanup here
-  │
-  ├── errorCaptured()    ← child errors
-  ├── activated()        ← <KeepAlive> enter
-  └── deactivated()      ← <KeepAlive> leave
+new component instance
+  ↓
+beforeCreate   — instance created, reactivity not set up
+created        — data/computed/watch/methods ready, no DOM
+  ↓
+beforeMount    — render function about to run
+  [child components mount here]
+mounted        — this component's DOM is in the document
+  ↓
+[reactive state changes]
+beforeUpdate   — DOM about to re-render
+updated        — DOM re-rendered
+  ↓
+[component removed]
+beforeUnmount  — still fully functional
+unmounted      — watchers stopped, child components gone
 ```
+
+**Parent vs child mount order:** parent `beforeMount` fires, then all children mount completely (their `mounted` fires), then parent `mounted` fires. So by the time parent's `mounted` runs, child refs are guaranteed to exist.
 
 ---
 
-## 1. `beforeCreate`
+## `beforeCreate`
 
-Very first hook. Component instance initializing — `data`, `computed`, `methods` not available yet.
+Fires before Vue sets up reactivity on the instance. `this.data` properties don't exist yet.
 
-```vue
-<script>
+Rarely useful. Main use: plugins that need to intercept before reactivity.
+
+```js
 export default {
   beforeCreate() {
-    console.log('Instance creating — no data/methods yet')
-    // this.message → undefined
+    // this.columns → undefined (data not set up)
+    // Only useful for low-level plugin initialization
   }
 }
-</script>
 ```
-
-**Use for:** plugin setup, rarely needed in app code.
 
 ---
 
-## 2. `created`
+## `created`
 
-Instance fully initialized. `data`, `computed`, `methods`, `watch` all ready. DOM not yet created.
+Data, computed, methods, and watchers are all ready. DOM doesn't exist yet (`this.$el` is undefined).
 
-```vue
-<script>
+**Best place to fetch data** — you're not blocking the browser's layout thread, and you can start fetching before the DOM renders.
+
+```js
 export default {
   data() {
-    return {
-      users: [],
-      loading: true
-    }
+    return { columns: [] as Column[], loading: true, error: null as string | null }
   },
 
   async created() {
-    const res = await fetch('/api/users')
-    this.users = await res.json()
-    this.loading = false
-  }
-}
-</script>
-```
-
-**Use for:** API calls, data init, logic that doesn't need DOM. Most common hook for fetching.
-
----
-
-## 3. `beforeMount`
-
-Render about to happen. DOM not created yet.
-
-```vue
-<script>
-export default {
-  beforeMount() {
-    console.log('About to render — DOM not ready')
-    // this.$el → not yet available
-  }
-}
-</script>
-```
-
-**Use for:** last-chance data prep before first render. Rarely needed.
-
----
-
-## 4. `mounted`
-
-DOM fully created. `this.$el` and template refs available.
-
-```vue
-<script>
-export default {
-  mounted() {
-    this.$refs.input.focus()       // direct DOM access
-    this.initChart()               // third-party lib init
-  },
-
-  methods: {
-    initChart() {
-      // e.g. Chart.js, mapbox, etc.
-    }
-  }
-}
-</script>
-
-<template>
-  <input ref="input" />
-</template>
-```
-
-**Use for:** DOM access, third-party lib init (charts, maps), event listeners.
-
----
-
-## 5. `beforeUpdate`
-
-Reactive data changed, DOM re-render about to happen. Old DOM still visible.
-
-```vue
-<script>
-export default {
-  data() {
-    return { count: 0 }
-  },
-
-  beforeUpdate() {
-    // capture scroll position before list re-renders
-    this.prevScrollY = window.scrollY
-  }
-}
-</script>
-
-<template>
-  <button @click="count++">{{ count }}</button>
-</template>
-```
-
-**Use for:** snapshot DOM state before update (e.g., scroll position).
-
----
-
-## 6. `updated`
-
-DOM re-rendered after reactive data changed.
-
-```vue
-<script>
-export default {
-  data() {
-    return { list: ['a', 'b'] }
-  },
-
-  updated() {
-    console.log('DOM updated, list length:', this.list.length)
-    // sync third-party widget with new DOM
-  }
-}
-</script>
-```
-
-> **Warning:** Don't mutate reactive data here — causes infinite loop.
-
-**Use for:** post-render DOM reads, syncing third-party widgets after DOM change.
-
----
-
-## 7. `beforeUnmount`
-
-Component still fully functional, about to be destroyed.
-
-```vue
-<script>
-export default {
-  data() {
-    return { timer: null }
-  },
-
-  mounted() {
-    this.timer = setInterval(() => console.log('tick'), 1000)
-  },
-
-  beforeUnmount() {
-    clearInterval(this.timer)   // cleanup while APIs still work
-  }
-}
-</script>
-```
-
-**Use for:** final cleanup while `this` and component APIs still accessible.
-
----
-
-## 8. `unmounted`
-
-Component fully removed from DOM. All refs and child components gone.
-
-```vue
-<script>
-export default {
-  mounted() {
-    window.addEventListener('resize', this.handleResize)
-  },
-
-  unmounted() {
-    window.removeEventListener('resize', this.handleResize)
-  },
-
-  methods: {
-    handleResize() {
-      console.log('width:', window.innerWidth)
-    }
-  }
-}
-</script>
-```
-
-**Use for:** remove event listeners, cancel subscriptions, disconnect WebSockets.
-
----
-
-## 9. `errorCaptured`
-
-Catches errors from any descendant component.
-
-```vue
-<script>
-export default {
-  data() {
-    return { error: null }
-  },
-
-  errorCaptured(err, instance, info) {
-    this.error = err.message
-    console.error('Caught from child:', err, info)
-    return false   // false = stop error propagation
-  }
-}
-</script>
-
-<template>
-  <div v-if="error">Error: {{ error }}</div>
-  <ChildComponent v-else />
-</template>
-```
-
-**Use for:** error boundaries around risky child trees.
-
----
-
-## 10. `activated` / `deactivated`
-
-Only fires for components inside `<KeepAlive>`.
-
-```vue
-<!-- Parent -->
-<template>
-  <KeepAlive>
-    <component :is="currentTab" />
-  </KeepAlive>
-</template>
-```
-
-```vue
-<!-- Child component -->
-<script>
-export default {
-  activated() {
-    console.log('Tab shown — resume polling')
-    this.startPolling()
-  },
-
-  deactivated() {
-    console.log('Tab hidden — pause polling')
-    this.stopPolling()
-  },
-
-  methods: {
-    startPolling() { /* ... */ },
-    stopPolling() { /* ... */ }
-  }
-}
-</script>
-```
-
-**Use for:** pause/resume side effects when switching tabs without destroying component.
-
----
-
-## 11. `serverPrefetch` (SSR Only)
-
-Called before component renders **on the server**. Resolves async data so HTML is pre-filled on first load.
-
-```vue
-<script>
-export default {
-  data() {
-    return { post: null }
-  },
-
-  async serverPrefetch() {
-    // runs on server only — populates state before HTML is sent to browser
-    this.post = await fetchPost(this.$route.params.id)
-  },
-
-  async mounted() {
-    // fallback — runs on client if not server-rendered
-    if (!this.post) {
-      this.post = await fetchPost(this.$route.params.id)
-    }
-  }
-}
-</script>
-```
-
-**Use for:** SSR data fetching (Nuxt, Quasar SSR). No-op in client-only apps.
-
----
-
-## 13. `renderTracked` / `renderTriggered` (Dev Only)
-
-Debug which reactive dependency triggered a re-render.
-
-```vue
-<script>
-export default {
-  renderTracked(event) {
-    console.log('Dependency tracked:', event)
-  },
-
-  renderTriggered(event) {
-    console.log('Re-render triggered by:', event)
-    // event.key, event.target, event.type
-  }
-}
-</script>
-```
-
-**Use for:** debugging unexpected re-renders. Stripped in production builds.
-
----
-
-## Real-World Pattern: Data Fetch + Cleanup
-
-```vue
-<script>
-export default {
-  data() {
-    return {
-      data: null,
-      loading: true,
-      controller: null
-    }
-  },
-
-  async mounted() {
-    this.controller = new AbortController()
     try {
-      const res = await fetch('/api/data', { signal: this.controller.signal })
-      this.data = await res.json()
+      this.columns = await api.getColumns(this.$route.params.id as string)
     } catch (e) {
-      if (e.name !== 'AbortError') console.error(e)
+      this.error = (e as Error).message
     } finally {
       this.loading = false
     }
+  }
+}
+```
+
+**created vs mounted for data fetch:** `created` fires slightly earlier (before DOM), which doesn't matter for API calls. But if your fetch needs `this.$refs` or DOM dimensions, use `mounted`.
+
+---
+
+## `mounted`
+
+The component's DOM is in the document. `this.$el` is the root element. `this.$refs` are populated.
+
+```js
+export default {
+  mounted() {
+    // DOM access
+    const el = this.$refs.columnContainer as HTMLElement
+    el.scrollLeft = el.scrollWidth   // scroll to end
+
+    // third-party lib that needs a real DOM node
+    this.sortable = new Sortable(el, {
+      onEnd: ({ item, to, newIndex }) => this.handleCardDrop(item, to, newIndex)
+    })
+
+    // event listeners that need to be cleaned up
+    window.addEventListener('keydown', this.handleKeyboard)
+  },
+
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.handleKeyboard)
+    this.sortable?.destroy()
+  }
+}
+```
+
+---
+
+## `beforeMount`
+
+Runs right before the component's render function executes for the first time. DOM not in document yet, but the render is about to happen.
+
+Rarely needed. One edge case: you need to do something after `created` but before the first paint (e.g., SSR hydration prep).
+
+---
+
+## `beforeUpdate`
+
+Fires after reactive state changes, before the DOM re-renders. The DOM still reflects the old state.
+
+```js
+export default {
+  beforeUpdate() {
+    // snapshot the scroll position before the list re-renders
+    // so you can restore it after (useful for infinite scroll)
+    const list = this.$refs.cardList as HTMLElement
+    this._prevScrollTop = list?.scrollTop
+  },
+
+  updated() {
+    const list = this.$refs.cardList as HTMLElement
+    if (list) list.scrollTop = this._prevScrollTop
+  }
+}
+```
+
+---
+
+## `updated`
+
+Fires after the DOM has re-rendered. `this.$el` reflects the new state.
+
+**Critical gotcha:** mutating reactive state here causes an infinite loop.
+
+```js
+export default {
+  updated() {
+    // BAD — triggers re-render → updated → re-render → ...
+    this.cardCount = this.columns.flatMap(c => c.cards).length
+
+    // GOOD — use a computed instead
+    // computed: { cardCount() { return ... } }
+
+    // OK — DOM read that doesn't affect reactive state
+    const height = this.$el.offsetHeight
+    this.reportHeight?.(height)  // only if reportHeight is an external callback
+  }
+}
+```
+
+**When to actually use `updated`:** syncing a third-party widget (like a chart) that needs to read the updated DOM. Even then, prefer `watch` on the data that drives the DOM change.
+
+---
+
+## `beforeUnmount`
+
+Component still fully functional — `this` works, refs work, watchers run. Last chance to clean up before teardown.
+
+```js
+export default {
+  mounted() {
+    this._resizeObserver = new ResizeObserver(this.handleResize)
+    this._resizeObserver.observe(this.$el)
+    document.addEventListener('visibilitychange', this.handleVisibility)
+  },
+
+  beforeUnmount() {
+    this._resizeObserver?.disconnect()
+    document.removeEventListener('visibilitychange', this.handleVisibility)
+  }
+}
+```
+
+---
+
+## `unmounted`
+
+Everything is torn down — watchers stopped, child components destroyed, DOM removed. `this.$el` is gone.
+
+Mostly used when the cleanup itself is async or when you're working with resources outside Vue's control.
+
+```js
+export default {
+  mounted() {
+    this.ws = new WebSocket('wss://api.example.com/board')
+    this.ws.onmessage = ({ data }) => {
+      const update = JSON.parse(data)
+      this.applyBoardUpdate(update)
+    }
   },
 
   unmounted() {
-    this.controller?.abort()   // cancel in-flight request if component removed
+    this.ws?.close()
   }
 }
-</script>
+```
+
+**beforeUnmount vs unmounted:** prefer `beforeUnmount` — Vue still has everything set up. `unmounted` is for when you need to wait until Vue has finished tearing down (rare).
+
+---
+
+## `activated` / `deactivated`
+
+Only fires for components inside `<KeepAlive>`. The component stays alive in memory rather than being destroyed — `mounted`/`unmounted` don't fire again on tab switch.
+
+```js
+export default {
+  data() { return { pollingTimer: null as ReturnType<typeof setInterval> | null } },
+
+  activated() {
+    // user switched back to this board tab
+    this.refreshBoard()
+    this.pollingTimer = setInterval(this.refreshBoard, 30_000)
+  },
+
+  deactivated() {
+    // user switched away — don't waste requests
+    clearInterval(this.pollingTimer!)
+    this.pollingTimer = null
+  }
+}
+```
+
+**Why not mounted/unmounted?** With KeepAlive, those only fire once (on first mount / final unmount). `activated`/`deactivated` fire every time the component enters/leaves the cache.
+
+---
+
+## `errorCaptured`
+
+Catches errors thrown in any descendant component's setup, lifecycle hooks, or event handlers. Return `false` to stop propagation to parent error handlers.
+
+```js
+export default {
+  data() { return { boardError: null as string | null } },
+
+  errorCaptured(err: Error, instance: ComponentPublicInstance | null, info: string) {
+    this.boardError = `Failed to load: ${err.message}`
+    console.error('[BoardView] child error:', err, info)
+    return false   // don't bubble to app-level error handler
+  }
+}
+```
+
+---
+
+## `serverPrefetch`
+
+SSR only (Nuxt, etc.). Called on the server before rendering. Use it to pre-populate data so the HTML sent to the browser is fully hydrated.
+
+```js
+export default {
+  async serverPrefetch() {
+    // runs on server — populates store before HTML is serialized
+    await useBoardStore().loadBoard(this.$route.params.id)
+  },
+
+  async mounted() {
+    // runs on client — data already hydrated from server, skip if present
+    if (!useBoardStore().columns.length) {
+      await useBoardStore().loadBoard(this.$route.params.id)
+    }
+  }
+}
+```
+
+---
+
+## `renderTracked` / `renderTriggered` (Dev Only)
+
+Debug which reactive dependency caused a re-render. Stripped in production.
+
+```js
+export default {
+  renderTriggered({ key, target, type }) {
+    console.log(`Re-render triggered: ${String(key)} was ${type}`)
+    // "Re-render triggered: cards was set"
+  }
+}
+```
+
+---
+
+## Hook Execution Order (Parent + Child)
+
+```
+parent beforeCreate
+parent created
+parent beforeMount
+  child beforeCreate
+  child created
+  child beforeMount
+  child mounted          ← child fully mounted first
+parent mounted           ← then parent
+
+[state changes]
+parent beforeUpdate
+  child beforeUpdate
+  child updated
+parent updated
+
+[teardown]
+parent beforeUnmount
+  child beforeUnmount
+  child unmounted
+parent unmounted
 ```
 
 ---
 
 ## Quick Reference
 
-| Hook | When | Common Use |
-|------|------|------------|
-| `beforeCreate` | Instance initializing | Plugin setup |
-| `created` | Instance ready, no DOM | API calls, data init |
-| `beforeMount` | Before first render | Last data prep |
-| `mounted` | DOM ready | DOM access, lib init |
-| `beforeUpdate` | Before re-render | Snapshot DOM |
-| `updated` | After re-render | Post-render DOM reads |
-| `beforeUnmount` | Before destroy | Cleanup while APIs live |
-| `unmounted` | After destroy | Remove listeners, cancel subs |
-| `errorCaptured` | Child error | Error boundaries |
-| `activated` | KeepAlive shown | Resume effects |
-| `deactivated` | KeepAlive hidden | Pause effects |
-| `serverPrefetch` | SSR: before server render | Pre-fill data for SSR |
-| `renderTracked` | Dev: dep tracked | Debug reactivity |
-| `renderTriggered` | Dev: re-render | Debug re-renders |
+| Hook | DOM | `this.$refs` | Common use |
+|------|-----|-------------|------------|
+| `beforeCreate` | ✗ | ✗ | Plugin setup |
+| `created` | ✗ | ✗ | API fetch, data init |
+| `beforeMount` | ✗ | ✗ | Rare |
+| `mounted` | ✓ | ✓ | DOM libs, event listeners |
+| `beforeUpdate` | old DOM | old | Scroll snapshot |
+| `updated` | ✓ | ✓ | Sync 3rd-party widget |
+| `beforeUnmount` | ✓ | ✓ | Cleanup (preferred) |
+| `unmounted` | ✗ | ✗ | Async cleanup |
+| `activated` | ✓ | ✓ | Resume polling (KeepAlive) |
+| `deactivated` | ✓ | ✓ | Pause polling (KeepAlive) |
+| `errorCaptured` | — | — | Error boundary |
+| `serverPrefetch` | — | — | SSR hydration |
